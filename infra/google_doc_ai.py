@@ -52,13 +52,20 @@ def ocr_document(
     return document.text
 
 # --- Usage Example ---
+# --- Usage Example ---
 if __name__ == "__main__":
-    # Ensure you have set the GOOGLE_APPLICATION_CREDENTIALS env var (see Step 2)
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = r"C:\Users\Shaq\Documents\receipts_document_intelligence\document-intelligence-481415-c71e576236f1.json"
-    FILE_PATH = r"C:\Users\Shaq\Documents\receipts_document_intelligence\sroie_50_samples\SROIE2019\train\img\X00016469612.jpg"
+    # Get the absolute path to the project root
+    # (This makes it work regardless of where you run the command from)
+    base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    # Correct Linux paths
+    creds_path = os.path.join(base_path, "document-intelligence-481415-c71e576236f1.json")
+    file_path = os.path.join(base_path, "Samples", "X00016469612.jpg")
+
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
 
     try:
-        text = ocr_document(FILE_PATH)
+        text = ocr_document(file_path)
         print("Extracted Text:\n", text)
     except Exception as e:
         print(f"Error: {e}")

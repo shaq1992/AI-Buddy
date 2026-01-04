@@ -1,0 +1,82 @@
+{
+  "rabbit_version": "3.12",
+  "users": [
+    {
+      "name": "guest",
+      "password_hash": "XPPTAIvLcWSiICxGgQhojmH7iZWiFl2yIPS9lSoowBZapzwG",
+      "hashing_algorithm": "rabbit_password_hashing_sha256",
+      "tags": "administrator"
+    }
+  ],
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "permissions": [
+    {
+      "user": "guest",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "queues": [
+    {
+      "name": "request_queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "result_queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    },
+    {
+      "name": "error_queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "ai_system_exchange",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "ai_system_exchange",
+      "vhost": "/",
+      "destination": "request_queue",
+      "destination_type": "queue",
+      "routing_key": "request"
+    },
+    {
+      "source": "ai_system_exchange",
+      "vhost": "/",
+      "destination": "result_queue",
+      "destination_type": "queue",
+      "routing_key": "result"
+    },
+    {
+      "source": "ai_system_exchange",
+      "vhost": "/",
+      "destination": "error_queue",
+      "destination_type": "queue",
+      "routing_key": "error"
+    }
+  ]
+}

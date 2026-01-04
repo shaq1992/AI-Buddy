@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  api:
+    image: api:v1.0.0        # Uses the manually built image
+    container_name: ai_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ai_shared_data:/shared_data
+    environment:
+      - RABBITMQ_HOST=ai-message-broker
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    external: true
+
+volumes:
+  ai_shared_data:
+    external: true
