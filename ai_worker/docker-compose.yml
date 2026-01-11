@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  worker:
+    image: ai_worker:v1.0.1
+    container_name: ai_worker
+    
+    # 1. Load the existing .env file
+    env_file:
+      - .env
+      
+    # 2. Add remaining variables not in .env
+    environment:
+      - RABBITMQ_HOST=ai-message-broker
+      - RABBITMQ_USER=guest
+      - RABBITMQ_PASS=guest
+      # Point to the key file inside the container (copied via Dockerfile)
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service_account.json
+      
+    volumes:
+      - ai_shared_data:/shared_data
+      
+    networks:
+      - ai-network
+      
+    restart: on-failure
+
+networks:
+  ai-network:
+    external: true
+
+volumes:
+  ai_shared_data:
+    external: true

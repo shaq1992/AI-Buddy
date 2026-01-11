@@ -32,7 +32,7 @@ generate_dump() {
 
     # 1. Build the find command dynamically
     # We always look for .py, Dockerfile, docker-compose.yml
-    local FIND_CMD="find \"$TARGET_DIR\" $MAX_DEPTH -type f \( -name \"*.py\" -o -name \"Dockerfile\" -o -name \"docker-compose.yml\""
+    local FIND_CMD="find \"$TARGET_DIR\" $MAX_DEPTH -type f \( -name \"*.py\" -o -name \"Dockerfile\" -o -name \"docker-compose.yml\" -o -name \"definitions.json\""
 
     # Add requirements.txt only if requested (usually for root only)
     if [ "$INCLUDE_REQS" == "yes" ]; then

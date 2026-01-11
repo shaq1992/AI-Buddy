@@ -1,0 +1,8 @@
+curl -X POST "http://localhost:8000/ingest" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "job_id=job_test_001" \
+  -F "problem_statement=Build a resume analyzer" \
+  -F "user_ideas=Use AI to extract skills" \
+  -F "user_techstack=Python, Docker" \
+  -F "user_resume=@Samples/Shadman Qaisar - Resume November 2025.pdf"
