@@ -95,15 +95,16 @@ Bash
 echo "dummy content" > test_doc.pdf
 
 # 2. Send the request
-curl -X 'POST' \
-  'http://localhost:8000/ingest' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: multipart/form-data' \
-  -F 'job_id=test-job-001' \
-  -F 'problem_statement=Extract key skills' \
-  -F 'user_ideas=Use OCR and LLM' \
-  -F 'user_techstack=Python, Docker' \
-  -F 'user_resume=@test_doc.pdf;type=application/pdf'
+
+
+curl -X POST "http://localhost:8000/ingest" \
+    -H "accept: application/json" \
+    -H "Content-Type: multipart/form-data" \
+    -F "job_id=job_test_001" \
+    -F "problem_statement=Build a resume analyzer" \
+    -F "user_ideas=Use AI to extract skills" \
+    -F "user_techstack=Python, Docker" \
+    -F "user_resume=@Samples/Shadman Qaisar - Resume November 2025.pdf"
 Option B: Using Swagger UI
 
 Go to http://localhost:8000/docs.

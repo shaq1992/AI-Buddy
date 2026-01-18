@@ -3,6 +3,8 @@ from google.api_core.client_options import ClientOptions
 from google.cloud import documentai
 from dotenv import load_dotenv
 load_dotenv()
+
+
 def ocr_document(
     file_path: str, 
 ) -> str:

@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   worker:
-    image: ai_worker:v1.0.1
+    image: ai_worker:v1.3.0
     container_name: ai_worker
     
     # 1. Load the existing .env file
