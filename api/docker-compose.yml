@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   api:
-    image: api:v1.0.0        # Uses the manually built image
+    image: ai_api:v2.0.0        # Uses the manually built image
     container_name: ai_api
     ports:
       - "8000:8000"

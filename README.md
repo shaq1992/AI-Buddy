@@ -105,6 +105,17 @@ curl -X POST "http://localhost:8000/ingest" \
     -F "user_ideas=Use AI to extract skills" \
     -F "user_techstack=Python, Docker" \
     -F "user_resume=@Samples/Shadman Qaisar - Resume November 2025.pdf"
+
+
+curl -X POST "http://localhost:8000/ingest" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
+  -F "job_id=job_manual_01" \
+  -F "problem_statement=Create a Python based chat bot" \
+  -F "user_ideas=Use websockets" \
+  -F "user_techstack=FastAPI, Redis" \
+  -F "user_resume=@Samples/Shadman Qaisar - Resume November 2025.pdf"
+
 Option B: Using Swagger UI
 
 Go to http://localhost:8000/docs.

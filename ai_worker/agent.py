@@ -1,66 +1,112 @@
-import logging
 import os
-import asyncio
+import logging
+from textwrap import dedent
+
+from crewai import Agent, Task, Crew, Process
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+# Assuming infra/google_doc_ai.py exists as per your tree
 from infra.google_doc_ai import ocr_document
-# Import the new core logic
-from core.simple_critic import analyze_request
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def process_request(data: dict) -> dict:
-    """
-    Orchestrates the AI processing:
-    1. OCR extraction (Google Doc AI)
-    2. AI Critic Analysis (Agent Framework + Gemini)
-    """
-    # Since the worker_engine calls this synchronously, we run the async agent code 
-    # using asyncio.run() for this version.
-    return asyncio.run(_process_request_async(data))
-
-async def _process_request_async(data: dict) -> dict:
-    job_id = data.get("job_id", "unknown")
-    file_path = data.get("file_path")
+def get_gemini_llm():
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing!")
     
-    # Extract User Context Fields
-    problem = data.get("problem_statement", "No problem provided")
-    ideas = data.get("user_ideas", "No ideas provided")
-    techstack = data.get("user_techstack", "No techstack provided")
+    return ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        verbose=True,
+        temperature=0.7,
+        google_api_key=api_key
+    )
 
-    logger.info(f"--- [Job: {job_id}] Processing Started ---")
+def process_request(message: dict, job_logger: logging.LoggerAdapter) -> dict:
+    """
+    1. Extract Info
+    2. OCR
+    3. Run CrewAI
+    4. Return Result
+    """
+    job_id = message.get("job_id")
+    file_path = message.get("file_path")
+    problem_statement = message.get("problem_statement")
+    user_ideas = message.get("user_ideas")
+    user_techstack = message.get("user_techstack")
 
-    # 1. Validation
-    if not file_path or not os.path.exists(file_path):
-        error_msg = f"File not found at {file_path}"
-        logger.error(error_msg)
-        return {"job_id": job_id, "status": "failed", "error": error_msg}
-
+    job_logger.info(f"Processing file: {file_path}")
+    
+    # 1. OCR Step
     try:
-        # 2. OCR Extraction (Infra Layer)
-        logger.info(f"Sending {file_path} to Google Doc AI...")
-        extracted_text = ocr_document(file_path)
-        logger.info(f"OCR Successful. Extracted {len(extracted_text)} characters.")
-
-        # 3. AI Agent Analysis (Core Layer)
-        logger.info("Handing off to Critic Agent...")
-        critique = await analyze_request(
-            problem=problem,
-            user_ideas=ideas,
-            user_techstack=techstack,
-            resume_text=extracted_text
-        )
-        
-        logger.info("Critic Agent finished successfully.")
-
-        # 4. Return Result Data
+        resume_text = ocr_document(file_path)
+        job_logger.info("OCR Extraction successful.")
+    except Exception as e:
+        job_logger.error(f"OCR Failed: {e}")
         return {
             "job_id": job_id,
-            "status": "completed",
-            "extracted_text_snippet": extracted_text[:200], # Don't return full text to save bandwidth
-            "ai_critique": critique, # The Agent's output
-            "original_request": data
+            "status": "failed",
+            "error": "OCR failed"
         }
 
-    except Exception as e:
-        logger.error(f"Processing failed: {e}")
-        return {"job_id": job_id, "status": "failed", "error": str(e)}
+    # 2. CrewAI Setup
+    job_logger.info("Initializing Agents...")
+    llm = get_gemini_llm()
+
+    # Agent: Critic
+    critic = Agent(
+        role='Senior Tech Critic',
+        goal='Validate user feasibility based on resume.',
+        backstory="You are a strict technical lead who checks if a developer can actually build what they propose.",
+        llm=llm,
+        verbose=True
+    )
+
+    # Agent: Architect
+    architect = Agent(
+        role='Solutions Architect',
+        goal='Design the technical implementation.',
+        backstory="You build scalable system designs using the requested tech stack.",
+        llm=llm,
+        verbose=True
+    )
+
+    # Task: Critique
+    task_critique = Task(
+        description=dedent(f"""
+            Context:
+            - Resume: {resume_text[:3000]}
+            - Problem: {problem_statement}
+            - Proposal: {user_ideas}
+            
+            Analyze if the user has the skills to build this. Identify risks.
+        """),
+        expected_output="Bulleted list of technical risks.",
+        agent=critic
+    )
+
+    # Task: Architecture
+    task_arch = Task(
+        description=dedent(f"""
+            Create a build plan for the user's problem.
+            Tech Stack: {user_techstack}
+            Use the critique from the previous task.
+        """),
+        expected_output="Markdown technical report.",
+        agent=architect
+    )
+
+    crew = Crew(
+        agents=[critic, architect],
+        tasks=[task_critique, task_arch],
+        process=Process.sequential,
+        verbose=True
+    )
+
+    job_logger.info("Kicking off Crew...")
+    result = crew.kickoff()
+    job_logger.info("Crew execution finished.")
+
+    return {
+        "job_id": job_id,
+        "status": "completed",
+        "result": str(result)
+    }

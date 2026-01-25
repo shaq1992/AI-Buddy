@@ -3,39 +3,55 @@ import time
 import json
 import logging
 import pika
+import sys
 import agent
 
-# Configure Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# --- Global Logger Config ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+main_logger = logging.getLogger("WorkerEngine")
 
-# Config
+# --- RabbitMQ Config ---
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "ai-message-broker")
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASS", "guest")
 
-# Constants from your definitions.json
 EXCHANGE_NAME = "ai_system_exchange"
 REQUEST_QUEUE = "request_queue"
-RESULT_ROUTING_KEY = "result" 
+RESULT_ROUTING_KEY = "result"
 
-def get_connection():
+class JobLoggerAdapter(logging.LoggerAdapter):
+    """
+    Prefixes all log messages with the specific Job ID.
+    """
+    def process(self, msg, kwargs):
+        return '[Job: %s] %s' % (self.extra['job_id'], msg), kwargs
+
+def get_rabbitmq_connection():
     credentials = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASS)
-    parameters = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=credentials)
+    parameters = pika.ConnectionParameters(
+        host=RABBITMQ_HOST, 
+        credentials=credentials,
+        heartbeat=600,
+        blocked_connection_timeout=300
+    )
     return pika.BlockingConnection(parameters)
 
 def main():
     connection = None
     while not connection:
         try:
-            connection = get_connection()
-            logger.info("Successfully connected to RabbitMQ!")
+            connection = get_rabbitmq_connection()
+            main_logger.info("Connected to RabbitMQ.")
         except pika.exceptions.AMQPConnectionError:
-            logger.warning("RabbitMQ not ready yet, retrying in 5 seconds...")
+            main_logger.warning("RabbitMQ unavailable. Retrying in 5s...")
             time.sleep(5)
 
     channel = connection.channel()
-    
+
     # Ensure infrastructure exists
     channel.queue_declare(queue=REQUEST_QUEUE, durable=True)
     channel.exchange_declare(exchange=EXCHANGE_NAME, exchange_type='direct', durable=True)
@@ -43,33 +59,38 @@ def main():
     def callback(ch, method, properties, body):
         try:
             message = json.loads(body)
+            job_id = message.get("job_id", "unknown")
             
-            # 1. Run the Agent Logic
-            result_data = agent.process_request(message)
-            
-            # 2. Publish Result
+            # Create custom logger for this job instance
+            job_logger = JobLoggerAdapter(main_logger, {'job_id': job_id})
+            job_logger.info("Received new task.")
+
+            # --- DELEGATE TO INTELLIGENCE LAYER ---
+            result_payload = agent.process_request(message, job_logger)
+            # --------------------------------------
+
+            # Publish Result
             ch.basic_publish(
                 exchange=EXCHANGE_NAME,
                 routing_key=RESULT_ROUTING_KEY,
-                body=json.dumps(result_data),
-                properties=pika.BasicProperties(
-                    delivery_mode=2,  # Make message persistent
-                )
+                body=json.dumps(result_payload),
+                properties=pika.BasicProperties(delivery_mode=2) 
             )
-            logger.info(f"Published result for Job {result_data.get('job_id')} to '{RESULT_ROUTING_KEY}'")
-
-            # 3. Acknowledge original request
+            
+            job_logger.info(f"Result published to '{RESULT_ROUTING_KEY}'.")
+            
+            # Ack
             ch.basic_ack(delivery_tag=method.delivery_tag)
 
         except Exception as e:
-            logger.error(f"Critical Worker Error: {e}")
-            # Reject and do NOT requeue (to prevent infinite error loops on bad data)
+            main_logger.error(f"Critical Worker Error: {e}")
+            # Negative Ack (do not requeue to prevent loops)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
 
     channel.basic_qos(prefetch_count=1)
     channel.basic_consume(queue=REQUEST_QUEUE, on_message_callback=callback)
 
-    logger.info(" [*] Worker AI Listening...")
+    main_logger.info("Worker is listening for tasks...")
     channel.start_consuming()
 
 if __name__ == "__main__":

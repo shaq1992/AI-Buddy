@@ -1,13 +1,5 @@
-pika==1.3.2
-google-genai
+pika
 python-dotenv
-
-
-# Infrastructure
-fastapi
-uvicorn
 google-cloud-documentai
-
-# The Brain (Microsoft Agent Framework + Gemini)
-agent-framework --pre
-google-genai
+langchain-google-genai
+crewai

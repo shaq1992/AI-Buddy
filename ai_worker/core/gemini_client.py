@@ -27,15 +27,13 @@ class GeminiChatClient(ChatClientProtocol):
         gemini_contents = self._convert_to_gemini_format(messages)
         
         try:
+            # 1. Real Call to Google Gemini
             response = self.client.models.generate_content(
                 model=self.model_id,
                 contents=gemini_contents
             )
             
-            # Convert Gemini response back to a simplistic Framework-compatible format
-            # The framework expects an object that has a 'message' or 'choices' attribute depending on usage.
-            # For our simple agent, returning a standard ChatMessage is usually sufficient if the agent handles it.
-            # However, strictly speaking, we return a structure the Agent expects.
+            # 2. Wrap result in a safe adapter object
             return self._wrap_response(response.text)
 
         except Exception as e:
@@ -55,7 +53,7 @@ class GeminiChatClient(ChatClientProtocol):
         )
         
         for chunk in response_stream:
-            # Yield chunks in a format the framework expects (Simulated Delta)
+            # Yield chunks in a format the framework expects
             yield self._wrap_delta(chunk.text)
 
     def _convert_to_gemini_format(self, messages: List[ChatMessage]) -> List[types.Content]:
@@ -65,24 +63,27 @@ class GeminiChatClient(ChatClientProtocol):
         formatted_history = []
         
         for msg in messages:
-            role = msg.role.lower()
+            # FIX 1: Handle Enum vs String for Role safely
+            # The framework uses Enums (Role.USER), but simpler tests might use strings.
+            if hasattr(msg.role, 'value'):
+                role = msg.role.value.lower()
+            else:
+                role = str(msg.role).lower()
             
-            # Map 'system' to 'user' with a distinct instruction for Gemini models 
-            # (unless using a model that supports strict system instructions, but this is safer)
-            if role == "system":
-                # We can prepend system instructions to the first user message or send as model config.
-                # For simplicity here, we treat it as a "developer" instruction if supported, or just User.
-                # Gemini 1.5+ supports system_instruction at client level, but for per-request context:
+            # Map roles to Gemini format
+            if "system" in role:
+                # Gemini 1.5/2.0 supports system instructions, but mixing them in history 
+                # often requires treating them as User prompts with a prefix for simplicity.
                 formatted_history.append(types.Content(
                     role="user",
                     parts=[types.Part(text=f"SYSTEM INSTRUCTION: {msg.content}")]
                 ))
-            elif role == "user":
+            elif "user" in role:
                 formatted_history.append(types.Content(
                     role="user",
                     parts=[types.Part(text=msg.content)]
                 ))
-            elif role == "assistant":
+            elif "assistant" in role or "model" in role:
                 formatted_history.append(types.Content(
                     role="model",
                     parts=[types.Part(text=msg.content)]
@@ -93,23 +94,31 @@ class GeminiChatClient(ChatClientProtocol):
     def _wrap_response(self, text: str):
         """
         Wraps text in a mock object that mimics an OpenAI-style response object 
-        if the framework strictly checks attributes, or just returns a ChatMessage.
+        expected by the Agent Framework.
         """
-        # The simplest valid return for the basic ChatAgent is often just a ChatMessage 
-        # but wrapped in a response envelope.
         return MockResponse(text)
 
     def _wrap_delta(self, text: str):
         return MockStreamDelta(text)
 
-# Helper Mocks to satisfy Framework Type Checks
+# --- SAFE MOCK CLASSES ---
+# We define our own simple classes to guarantee attributes like .content exist.
+# We do NOT use the library's ChatMessage class here to avoid schema validation errors.
+
 class MockResponse:
     def __init__(self, content):
         self.choices = [MockChoice(content)]
 
 class MockChoice:
     def __init__(self, content):
-        self.message = ChatMessage(role="assistant", content=content)
+        # FIX 2: Use SimpleMessage instead of library ChatMessage
+        self.message = SimpleMessage(role="assistant", content=content)
+
+class SimpleMessage:
+    """A simple data holder that guarantees .content and .role exist."""
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
 
 class MockStreamDelta:
     def __init__(self, content):
